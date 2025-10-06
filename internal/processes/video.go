@@ -103,6 +103,7 @@ func overwriteVideoAudio(tempDir, videoPath, audioPath string) (string, error) {
 		"-c:a", "aac",
 		"-map", "0:v:0",
 		"-map", "1:a:0",
+		"-y",
 		videoWithAudio,
 	}
 
@@ -124,6 +125,7 @@ func cropVideoLength(tempDir, videoPath, audioPath string) (string, error) {
 		"-i", videoPath,
 		"-t", audioDuration,
 		"-c", "copy",
+		"-y",
 		croppedVideo,
 	}
 
@@ -152,27 +154,35 @@ func getAudioDuration(audioPath string) (string, error) {
 }
 
 func runAutocap(videoPath string) (string, error) {
-	finalVideo := fmt.Sprintf("%s.mp4", generateRandomWord(7))
-
-	args := []string{
-		"./scripts/captions.py",
-		"attach",
-		videoPath,
-		finalVideo,
+	// Create generated directory if it doesn't exist
+	generatedDir := "./generated"
+	if err := os.MkdirAll(generatedDir, 0755); err != nil {
+		return "", fmt.Errorf("error creating generated directory: %w", err)
 	}
 
-	if err := executeCommand("python", args); err != nil {
-		log.Println("Argumentos video", args)
-		return "", fmt.Errorf("error running autocap: %w", err)
+	finalVideoName := fmt.Sprintf("%s.mp4", generateRandomWord(7))
+	finalVideoPath := filepath.Join(generatedDir, finalVideoName)
+
+	// Use absolute path for Python script execution
+	cmd := exec.Command("python3", "./scripts/captions.py", "attach", videoPath, finalVideoName)
+	cmd.Dir = "/app" // Set working directory explicitly
+	
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Python script error: %s", string(output))
+		log.Printf("Command: %v", cmd.Args)
+		return "", fmt.Errorf("error running captions script: %w", err)
 	}
 
-	return finalVideo, nil
+	log.Printf("Captions script output: %s", string(output))
+	return finalVideoPath, nil
 }
 
 func executeCommand(name string, args []string) error {
 	cmd := exec.Command(name, args...)
-	if _, err := cmd.CombinedOutput(); err != nil {
-		log.Printf("Error executing command %s: %v", name, err)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		log.Printf("Error executing command %s: %v, output: %s", name, err, string(output))
 		return err
 	}
 	return nil

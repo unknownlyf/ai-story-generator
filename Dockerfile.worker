@@ -10,17 +10,26 @@ RUN CGO_ENABLED=0 go build -tags netgo -ldflags '-s -w' -o /app/app cmd/main.go
 
 FROM python:3.12.5-slim
 
+# Install system packages like git and ffmpeg FIRST
+RUN apt-get update && apt-get install --no-install-recommends -y git ffmpeg imagemagick libmagick++-dev ghostscript && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/* && \
+    sed -i 's|<policy domain="path" rights="none" pattern="@\*"/>||' /etc/ImageMagick-6/policy.xml
+
+# Now, set up the Python environment
+ENV VIRTUAL_ENV=/opt/venv
+ENV PATH="/opt/venv/bin:$PATH"
+
 WORKDIR /app
 
 COPY scripts scripts
 COPY resources resources
 
-RUN apt-get update && apt-get install --no-install-recommends -y git ffmpeg imagemagick libmagick++-dev ghostscript
-RUN apt-get clean
-RUN rm -rf /var/lib/apt/lists/*
-RUN sed -i 's|<policy domain="path" rights="none" pattern="@\*"/>|<!--<policy domain="path" rights="none" pattern="@*"/> -->|' /etc/ImageMagick-6/policy.xml
+# Create a virtual environment and install dependencies into it
+RUN python -m venv /opt/venv
 RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r scripts/requirements.txt
+RUN pip install -r scripts/requirements.txt
+RUN pip install moviepy
 
 COPY --from=builder /app/app .
 
